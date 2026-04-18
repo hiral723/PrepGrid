@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Inline schema to avoid import issues
 const questionSchema = new mongoose.Schema({
   title: String, slug: String, description: String,
   examples: [{ input: String, output: String, explanation: String }],
@@ -259,9 +260,11 @@ async function seed() {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('Connected to MongoDB');
 
+    // Clear existing
     await Question.deleteMany({});
     console.log('Cleared existing questions');
 
+    // Insert
     const inserted = await Question.insertMany(QUESTIONS);
     console.log(`✅ Seeded ${inserted.length} questions`);
 
@@ -274,3 +277,130 @@ async function seed() {
 }
 
 seed();
+
+// Additional questions to add to the existing QUESTIONS array
+// Copy these into the QUESTIONS array in seed.js
+
+const EXTRA_QUESTIONS = [
+  {
+    title: 'Climbing Stairs',
+    slug: 'climbing-stairs',
+    description: 'You are climbing a staircase. It takes n steps to reach the top. Each time you can either climb 1 or 2 steps. In how many distinct ways can you climb to the top?',
+    examples: [{ input: 'n = 2', output: '2', explanation: 'Two ways: 1+1 or 2' }, { input: 'n = 3', output: '3', explanation: 'Three ways: 1+1+1, 1+2, 2+1' }],
+    constraints: ['1 <= n <= 45'],
+    hints: ['This is essentially Fibonacci', 'dp[i] = dp[i-1] + dp[i-2]'],
+    difficulty: 'Easy', topic: 'DP', tags: ['dynamic-programming', 'math'],
+    testCases: [{ input: '2', expectedOutput: '2', isHidden: false }, { input: '3', expectedOutput: '3', isHidden: false }, { input: '5', expectedOutput: '8', isHidden: true }],
+    starterCode: { javascript: 'function climbStairs(n) {\n  // Your solution here\n};\n', python: 'def climb_stairs(n):\n    pass\n', java: 'class Solution {\n    public int climbStairs(int n) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int climbStairs(int n) {\n        \n    }\n};\n' },
+    acceptanceRate: 51, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Best Time to Buy and Sell Stock',
+    slug: 'best-time-to-buy-sell-stock',
+    description: 'You are given an array prices where prices[i] is the price of a given stock on the ith day. You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve. If you cannot achieve any profit, return 0.',
+    examples: [{ input: 'prices = [7,1,5,3,6,4]', output: '5', explanation: 'Buy on day 2 (price=1) and sell on day 5 (price=6), profit = 5' }],
+    constraints: ['1 <= prices.length <= 10^5', '0 <= prices[i] <= 10^4'],
+    hints: ['Track the minimum price seen so far', 'At each step, calculate profit if sold today'],
+    difficulty: 'Easy', topic: 'Arrays', tags: ['array', 'dynamic-programming'],
+    testCases: [{ input: '[7,1,5,3,6,4]', expectedOutput: '5', isHidden: false }, { input: '[7,6,4,3,1]', expectedOutput: '0', isHidden: false }],
+    starterCode: { javascript: 'function maxProfit(prices) {\n  // Your solution here\n};\n', python: 'def max_profit(prices):\n    pass\n', java: 'class Solution {\n    public int maxProfit(int[] prices) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int maxProfit(vector<int>& prices) {\n        \n    }\n};\n' },
+    acceptanceRate: 54, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Palindrome Check',
+    slug: 'valid-palindrome',
+    description: 'A phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward. Given a string s, return true if it is a palindrome, or false otherwise.',
+    examples: [{ input: 's = "A man, a plan, a canal: Panama"', output: 'true' }, { input: 's = "race a car"', output: 'false' }],
+    constraints: ['1 <= s.length <= 2 * 10^5'],
+    hints: ['Use two pointers from both ends', 'Skip non-alphanumeric characters'],
+    difficulty: 'Easy', topic: 'Strings', tags: ['two-pointers', 'string'],
+    testCases: [{ input: '"A man, a plan, a canal: Panama"', expectedOutput: 'true', isHidden: false }, { input: '"race a car"', expectedOutput: 'false', isHidden: false }],
+    starterCode: { javascript: 'function isPalindrome(s) {\n  // Your solution here\n};\n', python: 'def is_palindrome(s):\n    pass\n', java: 'class Solution {\n    public boolean isPalindrome(String s) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    bool isPalindrome(string s) {\n        \n    }\n};\n' },
+    acceptanceRate: 43, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Majority Element',
+    slug: 'majority-element',
+    description: 'Given an array nums of size n, return the majority element. The majority element is the element that appears more than ⌊n / 2⌋ times. You may assume that the majority element always exists in the array.',
+    examples: [{ input: 'nums = [3,2,3]', output: '3' }, { input: 'nums = [2,2,1,1,1,2,2]', output: '2' }],
+    constraints: ['n == nums.length', '1 <= n <= 5 * 10^4'],
+    hints: ["Try Boyer-Moore Voting Algorithm", 'Or use a hash map to count frequencies'],
+    difficulty: 'Easy', topic: 'Arrays', tags: ['array', 'hash-table', 'sorting'],
+    testCases: [{ input: '[3,2,3]', expectedOutput: '3', isHidden: false }, { input: '[2,2,1,1,1,2,2]', expectedOutput: '2', isHidden: false }],
+    starterCode: { javascript: 'function majorityElement(nums) {\n  // Your solution here\n};\n', python: 'def majority_element(nums):\n    pass\n', java: 'class Solution {\n    public int majorityElement(int[] nums) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int majorityElement(vector<int>& nums) {\n        \n    }\n};\n' },
+    acceptanceRate: 64, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Coin Change',
+    slug: 'coin-change',
+    description: 'You are given an integer array coins representing coins of different denominations and an integer amount representing a total amount of money. Return the fewest number of coins that you need to make up that amount. If that amount of money cannot be made up by any combination of the coins, return -1.',
+    examples: [{ input: 'coins = [1,2,5], amount = 11', output: '3', explanation: '11 = 5 + 5 + 1' }, { input: 'coins = [2], amount = 3', output: '-1' }],
+    constraints: ['1 <= coins.length <= 12', '1 <= coins[i] <= 2^31 - 1', '0 <= amount <= 10^4'],
+    hints: ['Use bottom-up DP', 'dp[i] = minimum coins needed to make amount i'],
+    difficulty: 'Medium', topic: 'DP', tags: ['array', 'dynamic-programming', 'breadth-first-search'],
+    testCases: [{ input: '[1,2,5]\n11', expectedOutput: '3', isHidden: false }, { input: '[2]\n3', expectedOutput: '-1', isHidden: false }],
+    starterCode: { javascript: 'function coinChange(coins, amount) {\n  // Your solution here\n};\n', python: 'def coin_change(coins, amount):\n    pass\n', java: 'class Solution {\n    public int coinChange(int[] coins, int amount) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int coinChange(vector<int>& coins, int amount) {\n        \n    }\n};\n' },
+    acceptanceRate: 42, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Product of Array Except Self',
+    slug: 'product-of-array-except-self',
+    description: 'Given an integer array nums, return an array answer such that answer[i] is equal to the product of all the elements of nums except nums[i]. You must write an algorithm that runs in O(n) time and without using the division operation.',
+    examples: [{ input: 'nums = [1,2,3,4]', output: '[24,12,8,6]' }, { input: 'nums = [-1,1,0,-3,3]', output: '[0,0,9,0,0]' }],
+    constraints: ['2 <= nums.length <= 10^5'],
+    hints: ['Use prefix and suffix products', 'Left pass then right pass'],
+    difficulty: 'Medium', topic: 'Arrays', tags: ['array', 'prefix-sum'],
+    testCases: [{ input: '[1,2,3,4]', expectedOutput: '[24,12,8,6]', isHidden: false }, { input: '[-1,1,0,-3,3]', expectedOutput: '[0,0,9,0,0]', isHidden: false }],
+    starterCode: { javascript: 'function productExceptSelf(nums) {\n  // Your solution here\n};\n', python: 'def product_except_self(nums):\n    pass\n', java: 'class Solution {\n    public int[] productExceptSelf(int[] nums) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    vector<int> productExceptSelf(vector<int>& nums) {\n        \n    }\n};\n' },
+    acceptanceRate: 65, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Search in Rotated Sorted Array',
+    slug: 'search-rotated-sorted-array',
+    description: 'There is an integer array nums sorted in ascending order (with distinct values). Prior to being passed to your function, nums is possibly rotated at an unknown pivot index. Given the array nums and an integer target, return the index of target if it is in nums, or -1 if it is not.',
+    examples: [{ input: 'nums = [4,5,6,7,0,1,2], target = 0', output: '4' }, { input: 'nums = [4,5,6,7,0,1,2], target = 3', output: '-1' }],
+    constraints: ['1 <= nums.length <= 5000', 'All values are unique'],
+    hints: ['Use modified binary search', 'Determine which half is sorted'],
+    difficulty: 'Medium', topic: 'Binary Search', tags: ['array', 'binary-search'],
+    testCases: [{ input: '[4,5,6,7,0,1,2]\n0', expectedOutput: '4', isHidden: false }, { input: '[4,5,6,7,0,1,2]\n3', expectedOutput: '-1', isHidden: false }],
+    starterCode: { javascript: 'function search(nums, target) {\n  // Your solution here\n};\n', python: 'def search(nums, target):\n    pass\n', java: 'class Solution {\n    public int search(int[] nums, int target) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int search(vector<int>& nums, int target) {\n        \n    }\n};\n' },
+    acceptanceRate: 39, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'House Robber',
+    slug: 'house-robber',
+    description: 'You are a professional robber planning to rob houses along a street. Each house has a certain amount of money stashed. Adjacent houses have security systems connected — if two adjacent houses are broken into on the same night, the police will be alerted. Given an integer array nums representing the amount of money of each house, return the maximum amount of money you can rob tonight without alerting the police.',
+    examples: [{ input: 'nums = [1,2,3,1]', output: '4', explanation: 'Rob house 1 (1) then house 3 (3)' }, { input: 'nums = [2,7,9,3,1]', output: '12' }],
+    constraints: ['1 <= nums.length <= 100', '0 <= nums[i] <= 400'],
+    hints: ['dp[i] = max(dp[i-1], dp[i-2] + nums[i])'],
+    difficulty: 'Medium', topic: 'DP', tags: ['array', 'dynamic-programming'],
+    testCases: [{ input: '[1,2,3,1]', expectedOutput: '4', isHidden: false }, { input: '[2,7,9,3,1]', expectedOutput: '12', isHidden: false }],
+    starterCode: { javascript: 'function rob(nums) {\n  // Your solution here\n};\n', python: 'def rob(nums):\n    pass\n', java: 'class Solution {\n    public int rob(int[] nums) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    int rob(vector<int>& nums) {\n        \n    }\n};\n' },
+    acceptanceRate: 50, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Lowest Common Ancestor of BST',
+    slug: 'lowest-common-ancestor-bst',
+    description: 'Given a binary search tree (BST), find the lowest common ancestor (LCA) node of two given nodes in the BST. The LCA is defined as the lowest node in the tree that has both p and q as descendants (a node can be a descendant of itself).',
+    examples: [{ input: 'root = [6,2,8,0,4,7,9], p = 2, q = 8', output: '6' }, { input: 'root = [6,2,8,0,4,7,9], p = 2, q = 4', output: '2' }],
+    constraints: ['The number of nodes in the tree is in the range [2, 10^5]'],
+    hints: ['If both p and q are less than root, go left', 'If both are greater, go right', 'Otherwise root is the LCA'],
+    difficulty: 'Medium', topic: 'Trees', tags: ['tree', 'binary-search-tree', 'recursion'],
+    testCases: [{ input: '[6,2,8,0,4,7,9]\n2\n8', expectedOutput: '6', isHidden: false }],
+    starterCode: { javascript: 'function lowestCommonAncestor(root, p, q) {\n  // Your solution here\n};\n', python: 'def lowest_common_ancestor(root, p, q):\n    pass\n', java: 'class Solution {\n    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    TreeNode* lowestCommonAncestor(TreeNode* root, TreeNode* p, TreeNode* q) {\n        \n    }\n};\n' },
+    acceptanceRate: 62, solvedCount: 0, attemptCount: 0
+  },
+  {
+    title: 'Word Search',
+    slug: 'word-search',
+    description: 'Given an m x n grid of characters board and a string word, return true if word exists in the grid. The word can be constructed from letters of sequentially adjacent cells (horizontally or vertically). The same letter cell may not be used more than once.',
+    examples: [{ input: 'board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCCED"', output: 'true' }],
+    constraints: ['m == board.length', '1 <= m, n <= 6', '1 <= word.length <= 15'],
+    hints: ['Use DFS with backtracking', 'Mark cells as visited, then unmark on backtrack'],
+    difficulty: 'Medium', topic: 'Backtracking', tags: ['array', 'backtracking', 'dfs'],
+    testCases: [{ input: '[["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]]\nABCCED', expectedOutput: 'true', isHidden: false }],
+    starterCode: { javascript: 'function exist(board, word) {\n  // Your solution here\n};\n', python: 'def exist(board, word):\n    pass\n', java: 'class Solution {\n    public boolean exist(char[][] board, String word) {\n        \n    }\n}\n', cpp: 'class Solution {\npublic:\n    bool exist(vector<vector<char>>& board, string word) {\n        \n    }\n};\n' },
+    acceptanceRate: 40, solvedCount: 0, attemptCount: 0
+  },
+];
+// END EXTRA_QUESTIONS - add these to the QUESTIONS array in seed.js

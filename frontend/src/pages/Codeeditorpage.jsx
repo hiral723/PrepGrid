@@ -1,194 +1,280 @@
 import React from 'react';
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Editor from '@monaco-editor/react';
-import { Play, Send, ChevronLeft, ChevronRight, Lightbulb, CheckCircle, XCircle, Clock, Cpu } from 'lucide-react';
+import { Play, Send, ChevronLeft, Lightbulb, CheckCircle, XCircle, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../utils/api.js';
 import { DashboardLayout } from '../components/Sidebar.jsx';
 
 const LANGUAGES = [
   { id: 63, name: 'JavaScript', key: 'javascript' },
-  { id: 71, name: 'Python', key: 'python' },
-  { id: 62, name: 'Java', key: 'java' },
-  { id: 54, name: 'C++', key: 'cpp' },
+  { id: 71, name: 'Python',     key: 'python' },
+  { id: 62, name: 'Java',       key: 'java' },
+  { id: 54, name: 'C++',        key: 'cpp' },
 ];
 
 const JUDGE0_HOST = import.meta.env.VITE_JUDGE0_HOST;
-const JUDGE0_KEY = import.meta.env.VITE_JUDGE0_KEY;
+const JUDGE0_KEY  = import.meta.env.VITE_JUDGE0_KEY;
+
+const safeB64Encode = (str) => btoa(unescape(encodeURIComponent(str)));
+const safeB64Decode = (str) => { try { return decodeURIComponent(escape(atob(str))); } catch { return atob(str); } };
+
+const runOnJudge0 = async (code, langId, stdin = '') => {
+  const body = {
+    source_code: safeB64Encode(code),
+    language_id: langId,
+    stdin: safeB64Encode(stdin),
+  };
+  const resp = await fetch(
+    `https://${JUDGE0_HOST}/submissions?base64_encoded=true&wait=true`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-RapidAPI-Key': JUDGE0_KEY,
+        'X-RapidAPI-Host': JUDGE0_HOST,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  const result = await resp.json();
+  return {
+    stdout:          result.stdout          ? safeB64Decode(result.stdout)          : '',
+    stderr:          result.stderr          ? safeB64Decode(result.stderr)          : '',
+    compile_output:  result.compile_output  ? safeB64Decode(result.compile_output)  : '',
+    time:            result.time,
+    memory:          result.memory,
+    status:          result.status?.description || 'Unknown',
+    status_id:       result.status?.id,
+  };
+};
+
+// Wraps bare function code so Judge0 can actually call it
+const buildRunnable = (code, langKey, input) => {
+  const lines = input.trim().split('\n');
+  if (langKey === 'javascript') {
+    return `${code}
+
+// Auto-runner
+(function() {
+  const lines = ${JSON.stringify(lines)};
+  const parse = s => { try { return JSON.parse(s); } catch(e) { return s; } };
+  const fnMatch = \`${code.replace(/`/g,'\\`')}\`.match(/function\\s+(\\w+)\\s*\\(/);
+  if (!fnMatch) { console.log('No function found'); return; }
+  const fn = eval(fnMatch[1]);
+  const args = lines.map(parse);
+  const result = fn(...args);
+  console.log(JSON.stringify(result) !== undefined ? JSON.stringify(result) : result);
+})();`;
+  }
+  if (langKey === 'python') {
+    return `${code}
+
+# Auto-runner
+import ast, re, sys
+_lines = ${JSON.stringify(lines)}
+_src = '''${code.replace(/'/g, "\\'")}'''
+_m = re.search(r'def (\\w+)\\s*\\(', _src)
+if _m:
+    _fn = locals().get(_m.group(1)) or globals().get(_m.group(1))
+    if _fn:
+        _args = []
+        for l in _lines:
+            try: _args.append(ast.literal_eval(l))
+            except: _args.append(l)
+        print(_fn(*_args))`;
+  }
+  // For Java/C++ return as-is (user must write complete program)
+  return code;
+};
 
 export default function CodeEditorPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [lang, setLang] = useState(LANGUAGES[0]);
   const [code, setCode] = useState('');
-  const [tab, setTab] = useState('description'); 
+  const [tab, setTab] = useState('description');
   const [runOutput, setRunOutput] = useState(null);
   const [running, setRunning] = useState(false);
 
   const { data: question, isLoading } = useQuery({
     queryKey: ['question', id],
     queryFn: () => api.get(`/questions/${id}`).then(r => r.data),
-    onSuccess: (q) => {
-      setCode(q.starterCode?.[lang.key] || '// Write your solution here\n');
-    }
+    onSuccess: (q) => setCode(q.starterCode?.[lang.key] || '// Write your solution here\n'),
   });
+
+  const handleLangChange = (e) => {
+    const l = LANGUAGES.find(l => l.key === e.target.value);
+    setLang(l);
+    setCode(question?.starterCode?.[l.key] || '// Write your solution here\n');
+    setRunOutput(null);
+  };
+
+  const handleRun = async () => {
+    if (!code.trim()) return toast.error('Write some code first');
+    if (!JUDGE0_KEY || JUDGE0_KEY === 'your_judge0_key') {
+      toast.error('Judge0 API key not configured');
+      return;
+    }
+    setRunning(true);
+    setRunOutput(null);
+    try {
+      const tc = question?.testCases?.[0];
+      const input = tc?.input || '';
+      const runnable = buildRunnable(code, lang.key, input);
+      const result = await runOnJudge0(runnable, lang.id, input);
+      setRunOutput({ ...result, expectedOutput: tc?.expectedOutput });
+    } catch (err) {
+      toast.error('Code execution failed — check your Judge0 API key');
+      console.error(err);
+    } finally { setRunning(false); }
+  };
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      if (!code.trim()) throw new Error('Write some code first!');
-      
-      // Run against all visible test cases via Judge0
+      if (!code.trim()) throw new Error('Write some code first');
+      const visibleTCs = question?.testCases?.slice(0, 3) || [];
       const results = [];
-      for (const tc of question.testCases.slice(0, 3)) {
-        const body = { source_code: btoa(code), language_id: lang.id, stdin: btoa(tc.input) };
-        const resp = await fetch(`https://${JUDGE0_HOST}/submissions?base64_encoded=true&wait=true`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-RapidAPI-Key': JUDGE0_KEY, 'X-RapidAPI-Host': JUDGE0_HOST },
-          body: JSON.stringify(body)
-        });
-        const result = await resp.json();
-        const output = result.stdout ? atob(result.stdout).trim() : '';
+
+      for (const tc of visibleTCs) {
+        const runnable = buildRunnable(code, lang.key, tc.input);
+        const result = await runOnJudge0(runnable, lang.id, tc.input);
+        const actual = (result.stdout || '').trim();
+        const expected = (tc.expectedOutput || '').trim();
         results.push({
-          input: tc.input,
-          expected: tc.expectedOutput,
-          actual: output,
-          passed: output === tc.expectedOutput.trim(),
-          status: result.status?.description,
+          input: tc.input, expected, actual,
+          passed: actual === expected,
+          status: result.status,
           time: result.time,
-          memory: result.memory,
-          stderr: result.stderr ? atob(result.stderr) : ''
+          stderr: result.stderr,
+          compile_output: result.compile_output,
         });
       }
 
       const allPassed = results.every(r => r.passed);
-      const verdict = allPassed ? 'Accepted' : results.some(r => r.status?.includes('Time')) ? 'Time Limit Exceeded' : results.some(r => r.status?.includes('Runtime')) ? 'Runtime Error' : 'Wrong Answer';
+      const hasError = results.some(r => r.stderr || r.compile_output);
+      const verdict = allPassed ? 'Accepted'
+        : hasError ? 'Runtime Error'
+        : results.some(r => r.status?.includes('Time')) ? 'Time Limit Exceeded'
+        : 'Wrong Answer';
 
       await api.post('/submissions', {
         questionId: id, code, language: lang.key, verdict,
         testCasesPassed: results.filter(r => r.passed).length,
         totalTestCases: results.length,
-        runtime: results[0]?.time ? Math.round(results[0].time * 1000) : 0
+        runtime: results[0]?.time ? Math.round(results[0].time * 1000) : 0,
       });
 
+      queryClient.invalidateQueries(['dashboard']);
       return { results, verdict };
     },
     onSuccess: ({ verdict }) => {
       if (verdict === 'Accepted') toast.success('Accepted! ✅');
-      else toast.error(`${verdict}`);
+      else toast.error(verdict);
     },
-    onError: (err) => toast.error(err.message)
+    onError: (err) => toast.error(err.message),
   });
 
-  const handleRun = async () => {
-    if (!code.trim() || !question?.testCases?.[0]) return;
-    setRunning(true);
-    try {
-      const tc = question.testCases[0];
-      const body = { source_code: btoa(code), language_id: lang.id, stdin: btoa(tc.input) };
-      const resp = await fetch(`https://${JUDGE0_HOST}/submissions?base64_encoded=true&wait=true`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-RapidAPI-Key': JUDGE0_KEY, 'X-RapidAPI-Host': JUDGE0_HOST },
-        body: JSON.stringify(body)
-      });
-      const result = await resp.json();
-      setRunOutput({
-        stdout: result.stdout ? atob(result.stdout) : '',
-        stderr: result.stderr ? atob(result.stderr) : '',
-        time: result.time,
-        status: result.status?.description
-      });
-    } catch (err) {
-      toast.error('Code execution failed');
-    } finally {
-      setRunning(false);
-    }
-  };
+  const outputText = (r) => r.stdout || r.stderr || r.compile_output || '(no output)';
+  const isAccepted = (r) => r.status === 'Accepted' || r.status_id === 3;
 
-  if (isLoading) return <DashboardLayout><div className="skeleton h-96 rounded-2xl" /></DashboardLayout>;
+  if (isLoading) return (
+    <div style={{ display: 'flex', height: '100vh', background: '#1a1a1a', marginLeft: 220, alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: '#707070', fontSize: 14 }}>Loading problem...</div>
+    </div>
+  );
 
   return (
-    <div className="flex h-screen bg-[#050a0a] ml-60">
-      {/* Left: Problem */}
-      <div className="w-[420px] flex-shrink-0 border-r border-[rgba(0,229,224,0.08)] flex flex-col overflow-hidden">
+    <div style={{ display: 'flex', height: '100vh', background: '#1a1a1a', marginLeft: 220 }}>
+      {/* Left — Problem */}
+      <div style={{ width: 420, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Tabs */}
-        <div className="flex border-b border-[rgba(0,229,224,0.08)]">
-          {['description', 'hints', 'submissions'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-3 text-sm font-medium capitalize transition-colors ${tab === t ? 'text-[#00e5e0] border-b-2 border-[#00e5e0]' : 'text-[#7a9e9e] hover:text-[#e8f4f4]'}`}>
-              {t}
-            </button>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+          <button onClick={() => navigate('/practice')} style={{ padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: '#707070', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+            <ChevronLeft size={15} /> Back
+          </button>
+          {['description', 'hints'].map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', textTransform: 'capitalize',
+              color: tab === t ? '#f0f0f0' : '#707070',
+              borderBottom: tab === t ? '2px solid #60a5fa' : '2px solid transparent',
+            }}>{t}</button>
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px' }}>
           {tab === 'description' && (
             <div>
-              <div className="flex items-start gap-3 mb-4">
-                <h1 className="font-display text-xl font-bold flex-1">{question?.title}</h1>
-                <span className={`badge-${question?.difficulty?.toLowerCase()} px-3 py-1 rounded-full text-xs flex-shrink-0`}>{question?.difficulty}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+                <h1 style={{ fontSize: 17, fontWeight: 600, color: '#f0f0f0', flex: 1 }}>{question?.title}</h1>
+                <span className={`badge-${question?.difficulty?.toLowerCase()}`}>{question?.difficulty}</span>
               </div>
-              <div className="flex gap-2 mb-5">
-                <span className="px-2 py-1 rounded bg-[rgba(0,229,224,0.08)] text-[#00e5e0] text-xs">{question?.topic}</span>
-                {question?.tags?.map(t => <span key={t} className="px-2 py-1 rounded bg-[rgba(255,255,255,0.04)] text-[#4a6e6e] text-xs">{t}</span>)}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+                <span style={{ background: 'rgba(217,119,6,0.1)', color: '#60a5fa', borderRadius: 5, padding: '2px 8px', fontSize: 12 }}>{question?.topic}</span>
+                {question?.tags?.map(t => <span key={t} style={{ background: 'rgba(255,255,255,0.05)', color: '#707070', borderRadius: 5, padding: '2px 8px', fontSize: 11 }}>{t}</span>)}
               </div>
-              <p className="text-[#b0d4d4] text-sm leading-relaxed mb-6 whitespace-pre-wrap">{question?.description}</p>
-              
+              <p style={{ fontSize: 13, color: '#b0b0b0', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 20 }}>{question?.description}</p>
               {question?.examples?.map((ex, i) => (
-                <div key={i} className="mb-4 p-4 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-                  <p className="text-xs font-display font-semibold text-[#7a9e9e] mb-2">Example {i + 1}</p>
-                  <p className="text-xs font-mono text-[#b0d4d4]"><span className="text-[#4a6e6e]">Input: </span>{ex.input}</p>
-                  <p className="text-xs font-mono text-[#b0d4d4] mt-1"><span className="text-[#4a6e6e]">Output: </span>{ex.output}</p>
-                  {ex.explanation && <p className="text-xs text-[#7a9e9e] mt-2">{ex.explanation}</p>}
+                <div key={i} style={{ background: '#212121', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '12px 14px', marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#909090', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Example {i + 1}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#b0b0b0' }}>
+                    <div><span style={{ color: '#707070' }}>Input: </span>{ex.input}</div>
+                    <div><span style={{ color: '#707070' }}>Output: </span>{ex.output}</div>
+                    {ex.explanation && <div style={{ color: '#707070', marginTop: 6, fontFamily: 'inherit' }}>{ex.explanation}</div>}
+                  </div>
                 </div>
               ))}
-
               {question?.constraints?.length > 0 && (
-                <div>
-                  <p className="text-xs font-display font-semibold text-[#7a9e9e] mb-2">Constraints</p>
-                  <ul className="space-y-1">
-                    {question.constraints.map((c, i) => <li key={i} className="text-xs font-mono text-[#b0d4d4]">• {c}</li>)}
-                  </ul>
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#909090', marginBottom: 8 }}>Constraints</div>
+                  {question.constraints.map((c, i) => <div key={i} style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#b0b0b0', marginBottom: 4 }}>• {c}</div>)}
                 </div>
               )}
             </div>
           )}
-
           {tab === 'hints' && (
-            <div className="space-y-3">
+            <div>
               {question?.hints?.length > 0
                 ? question.hints.map((h, i) => (
-                  <details key={i} className="glass rounded-xl p-4 cursor-pointer">
-                    <summary className="text-sm font-medium flex items-center gap-2"><Lightbulb size={14} className="text-blue-400" /> Hint {i + 1}</summary>
-                    <p className="text-[#7a9e9e] text-sm mt-3">{h}</p>
+                  <details key={i} style={{ background: '#212121', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '12px 14px', marginBottom: 8, cursor: 'pointer' }}>
+                    <summary style={{ fontSize: 13, fontWeight: 500, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <Lightbulb size={14} />Hint {i + 1}
+                    </summary>
+                    <p style={{ fontSize: 13, color: '#909090', marginTop: 10, lineHeight: 1.6 }}>{h}</p>
                   </details>
                 ))
-                : <p className="text-[#4a6e6e] text-sm">No hints available for this problem.</p>
+                : <p style={{ fontSize: 13, color: '#555' }}>No hints available for this problem.</p>
               }
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[rgba(0,229,224,0.08)] bg-[#080f0f]">
-          <select value={lang.key} onChange={e => { const l = LANGUAGES.find(l => l.key === e.target.value); setLang(l); setCode(question?.starterCode?.[l.key] || ''); }}
-            className="bg-[rgba(255,255,255,0.05)] border border-[rgba(0,229,224,0.15)] rounded-lg px-3 py-1.5 text-sm text-[#e8f4f4] focus:outline-none focus:border-[rgba(0,229,224,0.4)]">
+      {/* Right — Editor */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#191919', flexShrink: 0 }}>
+          <select value={lang.key} onChange={handleLangChange}
+            style={{ background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '5px 10px', color: '#e0e0e0', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
             {LANGUAGES.map(l => <option key={l.key} value={l.key}>{l.name}</option>)}
           </select>
-          <div className="flex gap-2">
+          <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleRun} disabled={running}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[rgba(0,229,224,0.08)] border border-[rgba(0,229,224,0.2)] text-[#00e5e0] text-sm hover:bg-[rgba(0,229,224,0.12)] transition-colors disabled:opacity-50">
-              <Play size={14} />{running ? 'Running...' : 'Run'}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#d0d0d0', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', opacity: running ? 0.5 : 1 }}>
+              <Play size={13} />{running ? 'Running...' : 'Run'}
             </button>
             <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
-              className="btn-primary flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-lg disabled:opacity-50">
-              <Send size={14} />{submitMutation.isPending ? 'Submitting...' : 'Submit'}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 6, background: '#60a5fa', border: 'none', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: submitMutation.isPending ? 0.5 : 1 }}>
+              <Send size={13} />{submitMutation.isPending ? 'Submitting...' : 'Submit'}
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        {/* Monaco */}
+        <div style={{ flex: 1, overflow: 'hidden' }}>
           <Editor
             height="100%"
             language={lang.key === 'cpp' ? 'cpp' : lang.key}
@@ -198,39 +284,56 @@ export default function CodeEditorPage() {
             options={{
               fontSize: 14, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.6,
               minimap: { enabled: false }, scrollBeyondLastLine: false,
-              padding: { top: 16 }, tabSize: 2
+              padding: { top: 16 }, tabSize: 2, wordWrap: 'on',
             }}
           />
         </div>
 
+        {/* Output panel */}
         {(runOutput || submitMutation.data) && (
-          <div className="border-t border-[rgba(0,229,224,0.08)] bg-[#080f0f] p-4 max-h-48 overflow-y-auto">
-            {runOutput && (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: '#191919', padding: '14px 16px', maxHeight: 220, overflowY: 'auto', flexShrink: 0 }}>
+            {/* Run output */}
+            {runOutput && !submitMutation.data && (
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-xs px-2 py-0.5 rounded font-mono ${runOutput.status === 'Accepted' ? 'verdict-ac' : 'verdict-wa'}`}>{runOutput.status}</span>
-                  {runOutput.time && <span className="text-xs text-[#4a6e6e] flex items-center gap-1"><Clock size={11} />{Math.round(runOutput.time * 1000)}ms</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, fontFamily: 'JetBrains Mono, monospace',
+                    background: isAccepted(runOutput) ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: isAccepted(runOutput) ? '#4ade80' : '#f87171'
+                  }}>{runOutput.status}</span>
+                  {runOutput.time && <span style={{ fontSize: 11, color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={11} />{Math.round(runOutput.time * 1000)}ms</span>}
                 </div>
-                <pre className="text-xs font-mono text-[#b0d4d4] whitespace-pre-wrap">{runOutput.stdout || runOutput.stderr || '(no output)'}</pre>
+                {runOutput.expectedOutput && (
+                  <div style={{ fontSize: 12, color: '#707070', marginBottom: 6 }}>
+                    Expected: <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#b0b0b0' }}>{runOutput.expectedOutput}</span>
+                  </div>
+                )}
+                <pre style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#b0b0b0', whiteSpace: 'pre-wrap', margin: 0 }}>
+                  {outputText(runOutput)}
+                </pre>
               </div>
             )}
+
+            {/* Submit output */}
             {submitMutation.data && (
               <div>
-                <div className={`flex items-center gap-2 mb-3 text-sm font-display font-semibold ${submitMutation.data.verdict === 'Accepted' ? 'text-[#00e676]' : 'text-[#ff5252]'}`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14, fontWeight: 600,
+                  color: submitMutation.data.verdict === 'Accepted' ? '#4ade80' : '#f87171' }}>
                   {submitMutation.data.verdict === 'Accepted' ? <CheckCircle size={16} /> : <XCircle size={16} />}
                   {submitMutation.data.verdict}
                 </div>
-                <div className="space-y-2">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {submitMutation.data.results?.map((r, i) => (
-                    <div key={i} className={`p-3 rounded-lg text-xs ${r.passed ? 'bg-green-500/5 border border-green-500/20' : 'bg-red-500/5 border border-red-500/20'}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        {r.passed ? <CheckCircle size={12} className="text-[#00e676]" /> : <XCircle size={12} className="text-[#ff5252]" />}
-                        <span className="font-mono">Test case {i + 1}</span>
+                    <div key={i} style={{ background: r.passed ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${r.passed ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 7, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: r.passed ? 0 : 6, fontSize: 12, fontWeight: 500 }}>
+                        {r.passed ? <CheckCircle size={13} color="#4ade80" /> : <XCircle size={13} color="#f87171" />}
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', color: r.passed ? '#4ade80' : '#f87171' }}>Test case {i + 1} — {r.passed ? 'Passed' : 'Failed'}</span>
                       </div>
-                      {!r.passed && <>
-                        <p className="font-mono text-[#4a6e6e]">Expected: <span className="text-[#b0d4d4]">{r.expected}</span></p>
-                        <p className="font-mono text-[#4a6e6e]">Got: <span className="text-[#ff5252]">{r.actual || 'no output'}</span></p>
-                      </>}
+                      {!r.passed && (
+                        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+                          <div style={{ color: '#707070' }}>Expected: <span style={{ color: '#b0b0b0' }}>{r.expected}</span></div>
+                          <div style={{ color: '#707070' }}>Got: <span style={{ color: '#f87171' }}>{r.actual || r.stderr || r.compile_output || 'no output'}</span></div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
