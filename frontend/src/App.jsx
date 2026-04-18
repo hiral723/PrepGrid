@@ -6,21 +6,21 @@ import { useAuthStore } from './hooks/useAuth.js';
 import './styles/globals.css';
 
 const LandingPage = React.lazy(() => import('./pages/Landingpage.jsx'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage.jsx'));
-const RegisterPage = React.lazy(() => import('./pages/RegisterPage.jsx'));
-const VerifyOTPPage = React.lazy(() => import('./pages/VerifyOTPPage.jsx'));
-const ForgotPasswordPage = React.lazy(() => import('./pages/ForgotPasswordPage.jsx'));
-const DashboardPage = React.lazy(() => import('./pages/DashboardPage.jsx'));
-const PracticePage = React.lazy(() => import('./pages/PracticePage.jsx'));
-const CodeEditorPage = React.lazy(() => import('./pages/CodeEditorPage.jsx'));
-const InterviewPage = React.lazy(() => import('./pages/InterviewPage.jsx'));
-const InterviewSessionPage = React.lazy(() => import('./pages/InterviewSessionPage.jsx'));
-const QuizPage = React.lazy(() => import('./pages/QuizPage.jsx'));
-const QuizSessionPage = React.lazy(() => import('./pages/QuizSessionPage.jsx'));
-const LeaderboardPage = React.lazy(() => import('./pages/LeaderboardPage.jsx'));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage.jsx'));
-const UpgradePage = React.lazy(() => import('./pages/UpgradePage.jsx'));
-const AdminPage = React.lazy(() => import('./pages/AdminPage.jsx'));
+const LoginPage = React.lazy(() => import('./pages/Loginpage.jsx'));
+const RegisterPage = React.lazy(() => import('./pages/Registerpage.jsx'));
+const VerifyOTPPage = React.lazy(() => import('./pages/Verifyotppage.jsx'));
+const ForgotPasswordPage = React.lazy(() => import('./pages/Forgotpasswordpage.jsx'));
+const DashboardPage = React.lazy(() => import('./pages/Dashboardpage.jsx'));
+const PracticePage = React.lazy(() => import('./pages/Practicepage.jsx'));
+const CodeEditorPage = React.lazy(() => import('./pages/CodeEditorpage.jsx'));
+const InterviewPage = React.lazy(() => import('./pages/Interviewpage.jsx'));
+const InterviewSessionPage = React.lazy(() => import('./pages/Interviewsessionpage.jsx'));
+const QuizPage = React.lazy(() => import('./pages/Quizpage.jsx'));
+const QuizSessionPage = React.lazy(() => import('./pages/Quizsessionpage.jsx'));
+const LeaderboardPage = React.lazy(() => import('./pages/Leaderboardpage.jsx'));
+const ProfilePage = React.lazy(() => import('./pages/Profilepage.jsx'));
+const UpgradePage = React.lazy(() => import('./pages/Upgradepage.jsx'));
+const AdminPage = React.lazy(() => import('./pages/Adminpage.jsx'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30000 } }
