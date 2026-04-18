@@ -12,7 +12,7 @@ const VerifyOTPPage = React.lazy(() => import('./pages/Verifyotppage.jsx'));
 const ForgotPasswordPage = React.lazy(() => import('./pages/Forgotpasswordpage.jsx'));
 const DashboardPage = React.lazy(() => import('./pages/Dashboardpage.jsx'));
 const PracticePage = React.lazy(() => import('./pages/Practicepage.jsx'));
-const CodeEditorPage = React.lazy(() => import('./pages/CodeEditorpage.jsx'));
+const CodeEditorPage = React.lazy(() => import('./pages/Codeeditorpage.jsx'));
 const InterviewPage = React.lazy(() => import('./pages/Interviewpage.jsx'));
 const InterviewSessionPage = React.lazy(() => import('./pages/Interviewsessionpage.jsx'));
 const QuizPage = React.lazy(() => import('./pages/Quizpage.jsx'));
